@@ -19,8 +19,8 @@ class Particle {
   constructor(){
     //this.x = random(0,400);
     //this.y = random(0,400);
-    this.x = 200;
-    this.y = 200;
+    this.x = width/2;
+    this.y = height/2;
     //this.r = random(5,25);
     this.r = newParticle.Size;
     this.pos = new p5.Vector(this.x,this.y);
@@ -107,7 +107,7 @@ function addElem(){
 
 
 function setup() {
-  createCanvas(400, 400);
+  createCanvas(width, height);
   //particles.push(new Particle());
   //settings.addDropDown("Particle", particleNames);
   settings.bindText("Name", "default", newParticle);
