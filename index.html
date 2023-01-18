@@ -1,17 +1,693 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.1/p5.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.1/addons/p5.sound.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/quicksettings@latest/quicksettings.min.js"></script>
-    <script type="text/javascript" src="https://rawgit.com/lmccart/p5.js/master/lib/addons/p5.dom.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css">
-    <meta charset="utf-8" />
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Orbital</title>
+		<style>
+			body { margin: 0; }
+		</style>
 
-  </head>
-  <body>
-    <main>
-    </main>
-    <script src="sketch.js"></script>
-  </body>
+	</head>
+	<body>
+        <div id="container"></div>
+		<!-- <script src="js/three.js"></script> -->
+		<script type="x-shader/x-vertex" id="vertexshader">
+
+			attribute float scale;
+
+			void main() {
+
+				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+
+				gl_PointSize = scale * ( 300.0 / - mvPosition.z );
+
+				gl_Position = projectionMatrix * mvPosition;
+
+			}
+
+		</script>
+
+		<script type="x-shader/x-fragment" id="fragmentshader">
+
+			uniform vec3 color;
+
+			void main() {
+
+				if ( length( gl_PointCoord - vec2( 0.5, 0.5 ) ) > 0.475 ) discard;
+
+				gl_FragColor = vec4( color, 1.0 );
+
+			}
+
+		</script>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://unpkg.com/three@0.147.0/build/three.module.js",
+					"three/addons/": "https://unpkg.com/three@0.147.0/examples/jsm/"
+				}
+			}
+		</script>
+
+		<!-- <script type="module" src="particles.js"></script> -->
+
+		<script type="module">
+
+				import * as THREE from 'three';
+
+				//import {three} from './js/three.js';
+				//import * as THREE from 'three';
+
+
+				//import Stats from 'js/three/addons/libs/stats.module.js';
+				//import { UnrealBloomPass } from './three.js-dev/examples/jsm/postprocessing/UnrealBloomPass.js';
+				import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+				import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+				import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+				// import { GUI } from './lil-gui.module.min.js';
+				import Stats from 'three/addons/libs/stats.module.js';
+				import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+				import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+				//import { TransformControls } from 'three/addons/controls/TransformControls.js';
+				import { DragControls } from 'three/addons/controls/DragControls.js';
+				import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+				import WebGL from 'three/addons/capabilities/WebGL.js';
+
+				if ( WebGL.isWebGL2Available() === false ) {
+
+					document.body.appendChild( WebGL.getWebGL2ErrorMessage() );
+
+				}
+
+				let renderer, scene, camera, composer, controls, transformControl, dragControls, counter, distMag;
+				let mainMeshes, particleSystem, uniforms, geometry, material;
+				
+				const sphereHelperObjects = [];
+				let sphereCount = 6;
+                let selected = 0;
+				const raycaster = new THREE.Raycaster();
+				const pointer = new THREE.Vector2();
+				const mouse = new THREE.Vector2();
+				const onUpPosition = new THREE.Vector2();
+				const onDownPosition = new THREE.Vector2()
+				const spherePositions = [];
+                const offsets = [];
+                const angles = [];
+				const vels = [];
+				const targets = [];
+
+				//const objects = [];
+				
+				const particles = 200000;
+				const params = {
+					exposure: 1,
+					bloomStrength: 1.5,
+					bloomThreshold: 0,
+					bloomRadius: 0,
+					addPoint: addPoint,
+					removePoint: removePoint
+				};
+				const ARC_SEGMENTS = 200;
+				var mouseDown = false,
+						mouseX = 0,
+						mouseY = 0;
+
+
+
+						
+
+				init();
+				animate();
+
+				function init() {
+						// Scene
+					camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 10000 );
+					camera.position.z = 300;
+
+					scene = new THREE.Scene();
+					//const canvas = document.getElementById("container");
+					const canvas = document.createElement( 'canvas' );
+					const context = canvas.getContext( '2d' );
+					const gradient = context.createLinearGradient( 0, 0, 0, 32 );
+					gradient.addColorStop( 0.0, '#014a84' );
+					gradient.addColorStop( 0.5, '#0561a0' );
+					gradient.addColorStop( 1.0, '#437ab6' );
+					context.fillStyle = gradient;
+					context.fillRect( 0, 0, 1, 32 );
+
+					const sky = new THREE.Mesh(
+						new THREE.SphereGeometry( 1000 ),
+						new THREE.MeshBasicMaterial( { map: new THREE.CanvasTexture( canvas ), side: THREE.BackSide } )
+					);
+					scene.add( sky );
+
+					// mainMeshes = new THREE.Object3D();
+					// scene.add(mainMeshes);
+					// objects.push(mainMeshes);
+
+					
+
+						// Materials
+
+					//const material = new THREE.PointsMaterial( { color: 0xffffff } );
+
+					material = new THREE.ShaderMaterial( {
+
+						uniforms: {
+							color: { value: new THREE.Color( 0xffffff ) },
+						},
+						vertexShader: document.getElementById( 'vertexshader' ).textContent,
+						fragmentShader: document.getElementById( 'fragmentshader' ).textContent
+
+					} );
+					
+
+
+
+
+						// Geometry
+					const radius = 200;
+                    const maxOffset = 8;
+					geometry = new THREE.BufferGeometry();
+					
+					const positions = [];
+                    //const offsets = [];
+					const velocities = [];
+				
+
+					for ( let i = 0; i < particles; i ++ ) {
+
+                        //addParticle();
+                        
+						positions.push( ( Math.random() * 2 - 1 ) * radius );
+						positions.push( ( Math.random() * 2 - 1 ) * radius );
+						positions.push( ( Math.random() * 2 - 1 ) * radius );
+
+                        offsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+                        offsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+                        offsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+
+                        angles.push(( ( Math.random() ) *  3.14159 * 2));
+                        angles.push(( ( Math.random() ) *  3.14159 * 2));
+                        angles.push(( ( Math.random() ) *  3.14159 * 2));
+
+						vels.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+						vels.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+						vels.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+                       
+						//vels.push(0);
+						let initTarg = ( Math.floor(Math.random()) * sphereCount);
+						targets.push(initTarg);
+						targets.push(initTarg);
+						targets.push(initTarg);
+						
+
+						// let x = ( ( Math.random() * 2 - 1 ) * radius );
+						// let y = ( ( Math.random() * 2 - 1 ) * radius );
+						// let z = ( ( Math.random() * 2 - 1 ) * radius );
+						// let pos = new THREE.Vector3(x,y,z);
+
+						//geometry.vertices.push(pos);
+						// positions.push(pos);
+
+					}
+
+                    var pointsMaterial = new THREE.PointsMaterial(
+                    {
+                    vertexColors: THREE.VertexColors, 
+                        size: 0.5, 
+                        map: new THREE.TextureLoader().load("https://threejs.org/examples/textures/sprites/ball.png", tex => {
+                        tex.center.setScalar(0.5);
+                        tex.rotation = -Math.PI * 0.5;
+                        }), 
+                        alphaTest: 0.5
+                    }
+                    );
+
+					//geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+                    geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+                    geometry.setAttribute('offset', new THREE.Float32BufferAttribute( offsets, 3 ) );
+					geometry.setAttribute('vels', new THREE.Float32BufferAttribute( vels, 3 ) );
+					geometry.setAttribute('targets', new THREE.Float32BufferAttribute( targets, 3 ) );
+                    //geometry.setAttribute('speed', new THREE.Float32BufferAttribute( particles.speeds, 3 ) );
+					particleSystem = new THREE.Points( geometry, pointsMaterial );
+                    
+					//mainMeshes.add(particleSystem);
+					//objects.push(particleSystem);
+
+					// rotate particles brownian style
+					// for ( let i = 0; i < particles; i ++ ) {
+
+
+					// 	particleSystem.rotation.x = Math.random() * 111155;
+					// 	particleSystem.rotation.y = Math.random() * 111155;
+					// 	particleSystem.rotation.z = Math.random() * 111155;
+						
+
+					// }
+
+
+
+					scene.add( particleSystem );
+					
+					// Add user sphere
+
+					for ( let i = 0; i < sphereCount; i ++ ) {
+
+						addSphere( spherePositions[ i ] );
+
+					}
+
+					spherePositions.length = 0;
+
+					for ( let i = 0; i < sphereCount; i ++ ) {
+
+						spherePositions.push( sphereHelperObjects[ i ].position );
+
+					}
+
+
+					//OLD
+					// const userGeo = new THREE.SphereGeometry( 15, 32, 16 );
+					// const sphere = new THREE.Mesh(userGeo,material);
+					// //sphere.position.x = 50;
+					// //sphere.position.y = 50;
+					// scene.add(sphere);
+
+
+
+					// Set render + scene
+					renderer = new THREE.WebGLRenderer({ antialias: true } );
+					renderer.setPixelRatio( window.devicePixelRatio );
+					renderer.setSize( window.innerWidth, window.innerHeight );
+					renderer.toneMapping = THREE.ReinhardToneMapping;
+					const container = document.getElementById( 'container' );
+					container.appendChild( renderer.domElement );
+					const hemiLight = new THREE.HemisphereLight( 0xffffbb, 0x080820, 1 );
+					//scene.add( hemiLight );
+					const ambiLight = new THREE.AmbientLight( 0x404040, 1); // soft white light
+					scene.add( ambiLight );	
+
+					// // render settings
+					const renderScene = new RenderPass( scene, camera );	
+
+					const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1.5, 0.4, 0.85 );
+					bloomPass.threshold = params.bloomThreshold;
+					bloomPass.strength = params.bloomStrength;
+					bloomPass.radius = params.bloomRadius;
+
+					composer = new EffectComposer( renderer );
+					composer.addPass( renderScene );
+					composer.addPass( bloomPass );
+
+						// Controls
+					controls = new OrbitControls( camera, renderer.domElement );
+					controls.damping = 0.2;
+					controls.addEventListener( 'change', render );
+                    controls.autoRotate = true;
+					//controls.enabled = false;
+                    
+					
+
+					dragControls = new DragControls( [ ... sphereHelperObjects ], camera, renderer.domElement );
+					dragControls.addEventListener( 'dragend', function (event) {
+
+						event.object.position.needsUpdate = true;
+                        //console.log('distance is: ' + distance);
+                        console.log(distMag);
+						//console.log(sphereHelperObjects[0]);
+                        //console.log(sphereHelperObjects[selected].position);
+                        // const positions = particleSystem.geometry.getAttribute('position').array;
+                        // const sum = times.reduce((a, b) => a + b, 0);
+                        // const avg = (sum / times.length) || 0;
+                        // var particleCentre = 
+                        // console.log(particleSystem.geometry.getAttribute('position').array[0],
+                        //     particleSystem.geometry.getAttribute('position').array[1],
+                        //     particleSystem.geometry.getAttribute('position').array[2]
+                        // );
+						
+
+					});
+
+                    dragControls.addEventListener('dragstart', function(event){
+                        console.log(event.object.name);
+                        
+                        //selected = event.object.userData;
+                        // let tempOffsets = [];
+                        // for (let i = 0; i < particles; i++){
+
+                            
+                        //     tempOffsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+                        //     tempOffsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+                        //     tempOffsets.push(( ( Math.random() * 2 - 1 ) * maxOffset ));
+
+                        // }
+                        //array.sort(() => Math.random() - 0.5);
+
+                            // Shuffle offsets
+                        // var offsets = particleSystem.geometry.getAttribute('offset');
+                        // offsets.array.sort(() => Math.random() - 0.5);
+                        // particleSystem.geometry.attributes.offset.needsUpdate = true;
+
+
+                        //offsets = tempOffsets;
+                        //animate();
+
+                    })
+
+
+					window.addEventListener( 'resize', onWindowResize );
+					window.addEventListener( 'keydown', onKeyDown);
+					window.addEventListener('keyup', onKeyUp);
+
+					// GUI Setup
+
+					const gui = new GUI();
+
+					gui.add( params, 'exposure', 0.1, 2 ).onChange( function ( value ) {
+
+						renderer.toneMappingExposure = Math.pow( value, 4.0 );
+
+					} );
+
+					gui.add( params, 'bloomThreshold', 0.0, 1.0 ).onChange( function ( value ) {
+
+						bloomPass.threshold = Number( value );
+
+					} );
+
+					gui.add( params, 'bloomStrength', 0.0, 3.0 ).onChange( function ( value ) {
+
+						bloomPass.strength = Number( value );
+
+					} );
+
+					gui.add( params, 'bloomRadius', 0.0, 1.0 ).step( 0.01 ).onChange( function ( value ) {
+
+						bloomPass.radius = Number( value );
+
+					} );
+
+					gui.add( params, 'addPoint' );
+					gui.add( params, 'removePoint' );
+
+
+
+				}
+
+				
+
+				function onClick( event ) {
+
+					//event.preventDefault();
+
+					draggableObjects.push( ...sphereHelperObjects );
+					render();
+
+				}
+
+				function onKeyDown( event ) {
+
+					//enableOrbit = ( event.keyCode === 16 ) ? true : false;
+					controls.enabled = ( event.keyCode === 16 ) ? true : false;
+
+				}
+
+				function onKeyUp() {
+
+					//enableOrbit = false;
+					controls.enabled = false;
+				}
+
+
+
+				function addSphere( position ) {
+
+					const sphereMaterial = new THREE.MeshLambertMaterial( { color: 0xffffff } );
+
+
+					//const object = new THREE.Mesh( geometry, material );
+                    const id = sphereHelperObjects.length;
+                    console.log(id);
+					const userGeo = new THREE.SphereGeometry( 15, 128, 64 );
+                    //userGeo.setAttribute('num',id);
+					const object = new THREE.Mesh(userGeo,sphereMaterial);
+                    //object.name = id;
+
+					if ( position ) {
+
+						object.position.copy( position );
+
+					} else {
+
+						// object.position.x = Math.random() * 100 - 50;
+						// object.position.y = Math.random() * 60;
+						// object.position.z = Math.random() * 80 - 40;
+
+                        object.position.x = Math.random() * 200 - 100;
+						object.position.y = Math.random() * 200 - 100;
+						object.position.z = Math.random() * 200 - 100;
+
+						// object.position.x = 0;
+						// object.position.y = 500;
+						// object.position.z = 0;
+
+					}
+
+					//object.castShadow = true;
+					//object.receiveShadow = true;
+					scene.add( object );
+					// mainMeshes.add(object);
+					// objects.push(object);
+					sphereHelperObjects.push( object );
+                    sphereHelperObjects[id].userData = id;
+                    //object.setAttribute('id',sphereHelperObjects.length);
+					return object;
+
+				}
+
+				function addPoint() {
+
+					sphereCount ++;
+
+					spherePositions.push( addSphere().position );
+
+					render();
+
+				}
+
+				function removePoint() {
+
+					if ( sphereCount <= 3 ) {
+
+						return;
+
+					}
+
+					const point = sphereHelperObjects.pop();
+					sphereCount --;
+					spherePositions.pop();
+
+					if ( transformControl.object === point ) transformControl.detach();
+					scene.remove( point );
+
+					render();
+
+				}
+
+
+				function onWindowResize() {
+
+					camera.aspect = window.innerWidth / window.innerHeight;
+					camera.updateProjectionMatrix();
+
+					renderer.setSize( window.innerWidth, window.innerHeight );
+
+					render();
+
+				}
+
+
+				function animate() {
+
+					requestAnimationFrame( animate );
+					var verts = particleSystem.geometry.getAttribute('position');
+					var offsets = particleSystem.geometry.getAttribute('offset');
+					var vels = particleSystem.geometry.getAttribute('vels');
+					var targets = particleSystem.geometry.getAttribute('targets');
+
+					for ( let i = 0; i < verts.array.length; i++ ) {
+                        
+						if (i%3 ==0){
+
+                            // check furthest sphere
+                            let dir, distance, targDistMag;
+                            let maxDistance = 0;
+                            let vertPos = new THREE.Vector3();
+							let target = targets.array[i];
+							//console.log("target is: " + target);
+
+
+
+							let curSpherePos = sphereHelperObjects[target].position;
+							
+
+							// offsets.array[i] += Math.cos(angles[i])*0.025;
+                            // offsets.array[i+1] += Math.sin(angles[i+1])*0.025;
+                            //offsets.array[i+2] += Math.sin(angles[i]);
+							// angles[i] += 0.00025;
+                            // angles[i+1] += 0.000025;
+                            // angles[i+2] += 0.0001;
+
+                            let offset = new THREE.Vector3();
+                            offset.set(offsets.array[i], offsets.array[i+1], offsets.array[i+2]);
+							let targPos = new THREE.Vector3();
+							targPos.addVectors(curSpherePos,offset);
+
+							let targDist = new THREE.Vector3();
+                            vertPos.set(verts.array[i], verts.array[i+1], verts.array[i+2]);
+							
+							targDist.subVectors(targPos,vertPos);
+							targDistMag = Math.pow( Math.pow((targDist.x),2) + Math.pow((targDist.y),2) + Math.pow((targDist.z),2), 0.5);
+                            //console.log("spherecount is: " + sphereHelperObjects.length)
+                            for (let a = 0; a<sphereHelperObjects.length; a++){
+
+                                
+                                let tempSpherePos = sphereHelperObjects[a].position;
+								//let tempSpherePos = sphereHelperObjects[0].position;
+                                let spherePos = new THREE.Vector3();
+                                spherePos.set(tempSpherePos.x, tempSpherePos.y, tempSpherePos.z);
+                                
+                                distance = spherePos.subVectors(spherePos,vertPos);
+                                distMag = Math.pow( Math.pow((distance.x),2) + Math.pow((distance.y),2) + Math.pow((distance.z),2), 0.5);
+								//distMag = Math.pow( Math.pow((spherePos.x),2) + Math.pow((spherePos.y),2) + Math.pow((spherePos.z),2), 0.5);
+								
+                                //distMag = -1;
+                                //console.log('Distance is: ' + distMag);
+								if (distMag > targDistMag*2){
+
+									//if (distMag > maxDistance){
+
+									//maxDistance = distMag;
+									selected = a;
+									targets.array[i] = a;
+									targets.array[i+1] = a;
+									targets.array[i+2] = a;
+									//console.log("Selected is: " + a);
+
+									//}
+
+								}
+
+								// if(i == 300){
+								// 	console.log("current distance is: " + targDistMag);
+								// 	console.log("distance to sphere 2 is: " + distMag);
+								// 	console.log("target is: " + selected);
+								// }
+                                
+                                //selected = 0;
+
+                            }
+
+
+							// let tempSpherePos = sphereHelperObjects[selected].position;
+                            // let spherePos = new THREE.Vector3();
+                            // spherePos.set(tempSpherePos.x, tempSpherePos.y, tempSpherePos.z);
+                            
+                            //let spherePos = sphereHelperObjects[ 0 ].getWorldPosition;
+							//spherePos.multiplyScalar(-1);
+							//let spherePos = new THREE.Vector3(10,500,100);
+							// sphereHelperObjects[0].getWorldPosition(spherePos);
+							//let spherePos = spherePositions[0];
+                            
+
+                            //sphereHelperObjects[selected].position.y += (Math.sin(angles[i])-0.5)
+
+
+                            // offsets.array[i] += Math.cos(angles[i])*0.025;
+                            // offsets.array[i+1] += Math.sin(angles[i+1])*0.025;
+                            // //offsets.array[i+2] += Math.sin(angles[i]);
+                            // let offset = new THREE.Vector3();
+                            // offset.set(offsets.array[i], offsets.array[i+1], offsets.array[i+2]);
+							// let targPos = new THREE.Vector3();
+							// targPos.addVectors(spherePos,offset);
+							
+
+							let newPos = new THREE.Vector3()
+                            let velStep = new THREE.Vector3();
+							let vel = new THREE.Vector3();
+							vel.set(vels.array[i], vels.array[i+1], vels.array[i+2]);
+							//console.log(vels.array[i]);
+                            
+
+							//var mag = Math.pow( Math.pow((spherePos.x - vertPos.x),2) + Math.pow((spherePos.y - vertPos.y),2) + Math.pow((spherePos.z - vertPos.z),2), 0.5);
+							var mag = Math.pow( Math.pow((targPos.x - vertPos.x),2) + Math.pow((targPos.y - vertPos.y),2) + Math.pow((targPos.z - vertPos.z),2), 0.5);
+                            //var scale = 0.00001 * mag;
+                            var accelerationScale = 0.02;
+							var speedScale = 1.0;
+							//var offsetScale = 0.1;
+                            velStep.subVectors(targPos, vertPos );
+							velStep.normalize();
+							velStep.multiplyScalar(accelerationScale);
+
+							
+
+							vel.addVectors(vel, velStep);
+							//vel.addVectors(vel, offset);
+							vel.normalize();
+							vel.multiplyScalar(speedScale);
+							//newPos.addVectors(vertPos,velStep);
+                            newPos.addVectors(vertPos,vel);
+                            
+							vels.array[i] = vel.x;
+							vels.array[i+1] = vel.y;
+							vels.array[i+2] = vel.z;
+
+
+							verts.array[i] = newPos.x;
+							verts.array[i+1] = newPos.y;
+							verts.array[i+2] = newPos.z;
+
+							if (i%20 == 0){
+								//console.log(offset);
+                                
+
+							}
+
+						}
+					}
+
+					// particleSystem.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+					//particleSystem.geometry.setAttribute('position', verts);
+					//particleSystem.geometry.attributes.position.array = positions;
+					sphereHelperObjects[ 0 ].position.needsUpdate = true;
+					particleSystem.geometry.attributes.position.needsUpdate = true;
+					particleSystem.geometry.attributes.vels.needsUpdate = true;
+					//particleSystem.geometry.verticesNeedUpdate = true;
+					
+
+					render();
+					composer.render();
+					//stats.update();
+					//counter = counter+1;
+				}
+
+
+				function render() {
+
+					const time = Date.now() * 0.001;
+                    //camera.lookAt(new THREE.Vector3(0,0,0));
+					camera.rotation.z += 0.001
+                    //camera.rotation.x += 0.0005
+                    //camera.up = new THREE.Vector3(0,0,1);
+                    
+					//particleSystem.rotation.z = 0.01 * time;
+
+				}
+		</script>
+
+
+
+	</body>
 </html>
