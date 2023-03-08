@@ -1,15 +1,29 @@
 <!DOCTYPE html>
 <html>
 	<head>
+		<title>Orbital Hierarchy</title>
 		<meta charset="utf-8">
-		<title>Orbital</title>
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
 		<style>
-			body { margin: 0; }
+			body {
+				background-color: #000000;
+				color: #c5c5c5;
+				font-family: Arial, Helvetica, sans-serif;
+			}
+			a {
+				color: #08f;
+			}
 		</style>
-
 	</head>
 	<body>
+		<div id="info">
+			<div id="info">
+				Click and drag to orbit, hold shift to move spheres
+			</div>
+		</div>
         <div id="container"></div>
+	
 		<!-- <script src="js/three.js"></script> -->
 		<script type="x-shader/x-vertex" id="vertexshader">
 
@@ -99,7 +113,7 @@
 
 				//const objects = [];
 				
-				const particles = 200000;
+				const particles = 50000;
 				const params = {
 					exposure: 1,
 					bloomStrength: 1.5,
@@ -303,7 +317,7 @@
 
 						// Controls
 					controls = new OrbitControls( camera, renderer.domElement );
-					controls.damping = 0.2;
+					controls.damping = 0.4;
 					controls.addEventListener( 'change', render );
                     controls.autoRotate = true;
 					//controls.enabled = false;
@@ -312,7 +326,7 @@
 
 					dragControls = new DragControls( [ ... sphereHelperObjects ], camera, renderer.domElement );
 					dragControls.addEventListener( 'dragend', function (event) {
-
+					
 						event.object.position.needsUpdate = true;
                         //console.log('distance is: ' + distance);
                         console.log(distMag);
@@ -390,7 +404,8 @@
 					} );
 
 					gui.add( params, 'addPoint' );
-					gui.add( params, 'removePoint' );
+					//gui.add( params, 'removePoint' );
+					dragControls.enabled = false;
 
 
 
@@ -410,14 +425,21 @@
 				function onKeyDown( event ) {
 
 					//enableOrbit = ( event.keyCode === 16 ) ? true : false;
-					controls.enabled = ( event.keyCode === 16 ) ? true : false;
+					//controls.enabled = ( event.keyCode === 16 ) ? true : false;
+					// controls.enabled = ( event.keyCode === 16 ) ? false : true;
+					// dragControls.enabled = ( event.keyCode === 16 ) ? true : false;
+					if (event.keyCode == 16){
+						controls.enabled = false;
+						dragControls.enabled = true;
 
+					}
 				}
 
 				function onKeyUp() {
 
 					//enableOrbit = false;
-					controls.enabled = false;
+					controls.enabled = true;
+					dragControls.enabled = false;
 				}
 
 
